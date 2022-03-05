@@ -11,6 +11,7 @@ import threading
 import time
 import requests
 from collections import deque
+import logging
 
 class Token:
     clientId = ''
@@ -33,20 +34,20 @@ def getToken(token):
        r = requests.post(token.url, data=payload, timeout=10)
        if r.status_code == 200:
            t = json.loads(r.text)
-           print(t)
+           logging.debug(t)
            token.access_token = t["access_token"]
            token.type = t["token_type"]
            token.access_token_valid_until = datetime.now() + timedelta(seconds=t["expires_in"])
        else:
-           print(r.status_code)
+           logging.error(f'Got HTTP status {r.status_code} requesting token')
 
-def thread_print_json(name, messages, config):
+def thread_send_data(name, messages, config):
     token = Token(config["token"]["url"],
                   config["token"]["clientId"], 
                   config["token"]["clientSecret"],
                   config["token"]["scope"])
     while True:
-        # print("In thread: " + name + ", length: " + str(len(messages)) )
+        logging.debug("In thread: " + name + ", length: " + str(len(messages)) )
         if len(messages) > 0:
             payload = dict()
             data = []
@@ -54,18 +55,30 @@ def thread_print_json(name, messages, config):
                 msg = messages.popleft()
                 data.append(msg)
             payload['data'] = data
-            print(json.dumps(payload, indent = 4))
+            # TODO: make verbose level?
+            logging.debug(json.dumps(payload, indent = 4))
             getToken(token)
             # send the data
             r = requests.post(config["send"]["url"], json=payload, headers={'Authorization': token.type + ' ' + token.access_token})
             if r.status_code != 200:
-                print(r.status_code)
+                logging.error(f'Got HTTP status {r.status_code} sending data')
         time.sleep(config["send"]["sleepSec"])
 
 if __name__ == "__main__" :
-    # Debugging settings
-    production = True   # Use serial or file as input
-    debugging = 1   # Show extra output
+    # Read application configuration
+    configFile = 'config.json'
+    print(f'P1 reader starting. Reading configuration from {configFile}')
+    config = json.load(open(configFile, 'r'))
+
+    # Determine log level
+    level = logging.INFO
+    if config["logging"]["level"] == "DEBUG":
+        level = logging.DEBUG
+
+    # Logging settings
+    format = "%(asctime)s: %(name)s-%(levelname)s-%(message)s"
+    logging.basicConfig(format=format, level=level)
+
     # DSMR interesting codes
     gas_meter = '1' 
     list_of_interesting_codes = {
@@ -101,11 +114,8 @@ if __name__ == "__main__" :
     # the list to pass messages to the thread
     messages = deque([])
 
-    # Read application configuration
-    config = json.load(open("config.json", 'r'))
-
     # Start helper threads
-    jsonThread = threading.Thread(target=thread_print_json, args=("json", messages, config), daemon=True)
+    jsonThread = threading.Thread(target=thread_send_data, args=("Send json", messages, config), daemon=True)
     jsonThread.start()
 
     max_len = 72
@@ -122,54 +132,48 @@ if __name__ == "__main__" :
     telegram = ''
     checksum_found = False
     ser_is_open = False
+    ser_reopen = False
     good_checksum = False
     count = 0
+    badChecksumCount = 0
     
-    if production:
-        # Serial port configuration
-        ser = serial.Serial()
-        ser.baudrate = 115200
-        ser.bytesize = serial.EIGHTBITS
-        ser.parity = serial.PARITY_NONE
-        ser.stopbits = serial.STOPBITS_ONE
-        ser.xonxoff = 1
-        ser.rtscts = 0
-        ser.timeout = 12
-        ser.port = "/dev/ttyUSB0"
-    else:
-        print("Running in test mode")
-        # Testing
-        ser = open("raw.out", 'rb')
+    # Serial port configuration
+    ser = serial.Serial()
+    ser.baudrate = 115200
+    ser.bytesize = serial.EIGHTBITS
+    ser.parity = serial.PARITY_NONE
+    ser.stopbits = serial.STOPBITS_ONE
+    ser.xonxoff = 1
+    ser.rtscts = 0
+    ser.timeout = 12
+    ser.port = config["serial"]["port"]
     
     while True:
+        time.sleep(0.1)
         try:
             # Read in all the lines until we find the checksum (line starting with an exclamation mark)
             telegram = ''
             checksum_found = False
-            if production :
-                if not ser_is_open :
-                    # Open serial port
-                    try:
-                        if debugging == 1:
-                            print("Opening serial line, count {0}".format(count))
-                        count += 1
-                        ser.open()
-                        ser_is_open = True
-                    except Exception as ex:
-                        template = "An exception of type {0} occured. Arguments:\n{1!r}"
-                        message = template.format(type(ex).__name__, ex.args)
-                        print(message)
-                        sys.exit("Fout bij het openen van %s. Programma afgebroken." % ser.name)
+            if not ser_is_open :
+                # Open serial port
+                try:
+                    logging.info(f"Opening serial line, count {count}")
+                    count += 1
+                    ser.open()
+                    ser_is_open = True
+                except Exception as ex:
+                    template = "An exception of type {0} occured. Arguments:{1!r}"
+                    message = template.format(type(ex).__name__, ex.args)
+                    logging.critical(f'Error opening serial device {ser.name}. Error: {message}')
+                    sys.exit('Exiting')
             while not checksum_found:
                 # Read in a line
                 telegram_line = ser.readline().decode('ascii')
-                if debugging == 2:
-                    print(telegram_line.decode('ascii').strip())
+                logging.debug(telegram_line.strip())
                 # Check if it matches the checksum line (! at start)
                 if re.match('(?=!)', telegram_line):
                     telegram = telegram + telegram_line
-                    if debugging > 1:
-                        print('Found checksum!')
+                    logging.debug('Found checksum!')
                     checksum_found = True
                 else:
                     telegram = telegram + telegram_line
@@ -177,17 +181,18 @@ if __name__ == "__main__" :
         except Exception as ex:
             template = "An exception of type {0} occured. Arguments:\n{1!r}"
             message = template.format(type(ex).__name__, ex.args)
-            print(message)
-            print("There was a problem %s, continuing...") % ex
-        # Close serial port
-        if production and False:
+            logging.error(message)
+            logging.error("There was a problem %s, continuing..." % ex)
+            ser_reopen = True
+        # Close serial port on problems
+        if ser_reopen and ser_is_open:
+            ser_reopen = False
             try:
-                if debugging == 1:
-                    print("Closing serial line")
+                logging.debug("Closing serial line")
                 ser.close()
                 ser_is_open = False
-            except:
-                sys.exit("Oops %s. Programma afgebroken." % ser.name)
+            except Exception as ex:
+                sys.exit(f"Oops {ser.name}. Exiting. {ex}")
         # We have a complete telegram, now we can process it.
         # Look for the checksum in the telegram
         for m in pattern.finditer(telegram):
@@ -199,8 +204,7 @@ if __name__ == "__main__" :
             if given_checksum == calculated_checksum:
                 good_checksum = True
         if good_checksum:
-            if debugging > 1:
-                print("Good checksum !")
+            logging.debug("Good checksum!")
             # Store the vaules in a dictionary
             telegram_values = dict()
             # Split the telegram into lines and iterate over them
@@ -208,15 +212,11 @@ if __name__ == "__main__" :
                 # Split the OBIS code from the value
                 # The lines with a OBIS code start with a number
                 if re.match('\d', telegram_line):
-                    if debugging == 3:
-                        print(telegram_line)
+                    logging.debug(telegram_line)
                     # The values are enclosed with parenthesis
                     # Find the location of the first opening parenthesis,
                     # and store all split lines
-                    if debugging == 2:
-                        print(telegram_line)
-                    if debugging == 3:
-                        print(re.split('(\()', telegram_line))
+                    logging.debug(re.split('(\()', telegram_line))
                     # You can't put a list in a dict TODO better solution
                     code = ''.join(re.split('(\()', telegram_line)[:1])
                     value = ''.join(re.split('(\()', telegram_line)[1:])
@@ -241,17 +241,15 @@ if __name__ == "__main__" :
                     # Print nicely formatted string
                     if print_format == 'string' :
                         print_string = '{0:<'+str(max_len)+'}{1:>12}'
-                        if debugging > 0:
-                                print(datetime.datetime.utcnow()),
-                        print(print_string.format(list_of_interesting_codes[code][0], value))
+                        logging.debug(print_string.format(list_of_interesting_codes[code][0], value))
                     elif print_format == 'json' :
                         json_values[list_of_interesting_codes[code][1]] = value
                     else:
                         print_string = '{0:<10}{1:>12}'
-                        if debugging > 0:
-                                print(datetime.datetime.utcnow()),
-                        print(print_string.format(code, value))
+                        logging.debug(print_string.format(code, value))
             if print_format == 'json' :
                 messages.append(json_values)
         else:
-            print("Bad checksum")
+            badChecksumCount += 1
+            if badChecksumCount > 1:
+                logging.warning("Bad checksum")
