@@ -82,34 +82,34 @@ if __name__ == "__main__" :
     # DSMR interesting codes
     gas_meter = '1' 
     list_of_interesting_codes = {
-        '1-0:1.8.1': ['Meter Reading electricity delivered to client (Tariff 1) in kWh', 'totalPowerDeliveredToClientTariff1'],
-        '1-0:1.8.2': ['Meter Reading electricity delivered to client (Tariff 2) in kWh', 'totalPowerDeliveredToClientTariff2'],
+        '1-0:1.8.1': ['Meter Reading electricity delivered to client (Tariff 1) in kWh', 'totalEnergyDeliveredToClientTariff1', 'kWh'],
+        '1-0:1.8.2': ['Meter Reading electricity delivered to client (Tariff 2) in kWh', 'totalEnergyDeliveredToClientTariff2', 'kWh'],
         '1-0:2.8.1': ['Meter Reading electricity delivered by client (Tariff 1) in kWh', ''],
         '1-0:2.8.2': ['Meter Reading electricity delivered by client (Tariff 2) in kWh', ''],
-        '0-0:96.14.0': ['Tariff indicator electricity', 'tariffIndicator'],
-        '1-0:1.7.0': ['Actual electricity power delivered (+P) in kW', 'actualPowerDelivered'],
+        '0-0:96.14.0': ['Tariff indicator electricity', 'tariffIndicator', ''],
+        '1-0:1.7.0': ['Actual electricity power delivered (+P) in kW', 'actualPowerDelivered', 'kW'],
         '1-0:2.7.0': ['Actual electricity power received (-P) in kW', ''],
         '0-0:17.0.0': ['The actual threshold electricity in kW', ''],
-        '0-0:96.3.10': ['Switch position electricity', 'switch'],
-        '0-0:96.7.21': ['Number of power failures in any phase', 'failures'],
-        '0-0:96.7.9': ['Number of long power failures in any phase', 'longFailures'],
+        '0-0:96.3.10': ['Switch position electricity', 'switch', ''],
+        '0-0:96.7.21': ['Number of power failures in any phase', 'failures', ''],
+        '0-0:96.7.9': ['Number of long power failures in any phase', 'longFailures', ''],
         '1-0:32.32.0': ['Number of voltage sags in phase L1', ''],
         '1-0:52.32.0': ['Number of voltage sags in phase L2', ''],
         '1-0:72:32.0': ['Number of voltage sags in phase L3', ''],
         '1-0:32.36.0': ['Number of voltage swells in phase L1', ''],
         '1-0:52.36.0': ['Number of voltage swells in phase L2', ''],
         '1-0:72.36.0': ['Number of voltage swells in phase L3', ''],
-        '1-0:31.7.0': ['Instantaneous current L1 in A', 'actualCurrentL1'],
-        '1-0:32.7.0': ['Instantaneous voltage L1 in V', 'actualVoltageL1'],
+        '1-0:31.7.0': ['Instantaneous current L1 in A', 'actualCurrentL1', 'A'],
+        '1-0:32.7.0': ['Instantaneous voltage L1 in V', 'actualVoltageL1', 'V'],
         '1-0:51.7.0': ['Instantaneous current L2 in A', ''],
         '1-0:71.7.0': ['Instantaneous current L3 in A', ''],
-        '1-0:21.7.0': ['Instantaneous active power L1 (+P) in kW', 'actualPowerL1'],
+        '1-0:21.7.0': ['Instantaneous active power L1 (+P) in kW', 'actualPowerL1', 'kW'],
         '1-0:41.7.0': ['Instantaneous active power L2 (+P) in kW', ''],
         '1-0:61.7.0': ['Instantaneous active power L3 (+P) in kW', ''],
         '1-0:22.7.0': ['Instantaneous active power L1 (-P) in kW', ''],
         '1-0:42.7.0': ['Instantaneous active power L2 (-P) in kW', ''],
         '1-0:62.7.0': ['Instantaneous active power L3 (-P) in kW', ''],
-        '0-'+gas_meter+':24.2.1': ['gas delivered to client in m3', 'totalGasDeliveredToClient']
+        '0-'+gas_meter+':24.2.1': ['gas delivered to client in m3', 'totalGasDeliveredToClient', 'm3']
     }
     # the list to pass messages to the thread
     messages = deque([])
@@ -243,7 +243,13 @@ if __name__ == "__main__" :
                         print_string = '{0:<'+str(max_len)+'}{1:>12}'
                         logging.debug(print_string.format(list_of_interesting_codes[code][0], value))
                     elif print_format == 'json' :
-                        json_values[list_of_interesting_codes[code][1]] = value
+                        if len(list_of_interesting_codes[code]) > 1 and len(list_of_interesting_codes[code][2]) > 0 :
+                            valueWithUnit = dict()
+                            valueWithUnit['unit'] = '\"' + list_of_interesting_codes[code][2] + '\"'
+                            valueWithUnit['value'] = value
+                            json_values[list_of_interesting_codes[code][1]] = valueWithUnit
+                        else :
+                            json_values[list_of_interesting_codes[code][1]] = value
                     else:
                         print_string = '{0:<10}{1:>12}'
                         logging.debug(print_string.format(code, value))
