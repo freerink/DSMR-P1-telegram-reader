@@ -57,9 +57,9 @@ def thread_send_data(name, messages, config):
             payload['data'] = data
             # TODO: make verbose level?
             logging.debug(json.dumps(payload, indent = 4))
-            getToken(token)
-            # send the data
+            # Get the (cached) token and send the data
             try:
+                getToken(token)
                 r = requests.post(config["send"]["url"], json=payload, headers={'Authorization': token.type + ' ' + token.access_token})
                 if r.status_code != 200:
                     logging.error(f'Got HTTP status {r.status_code} sending data')
