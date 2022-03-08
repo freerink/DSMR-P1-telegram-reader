@@ -59,9 +59,15 @@ def thread_send_data(name, messages, config):
             logging.debug(json.dumps(payload, indent = 4))
             getToken(token)
             # send the data
-            r = requests.post(config["send"]["url"], json=payload, headers={'Authorization': token.type + ' ' + token.access_token})
-            if r.status_code != 200:
-                logging.error(f'Got HTTP status {r.status_code} sending data')
+            try:
+                r = requests.post(config["send"]["url"], json=payload, headers={'Authorization': token.type + ' ' + token.access_token})
+                if r.status_code != 200:
+                    logging.error(f'Got HTTP status {r.status_code} sending data')
+            except Exception as ex:
+                template = "An exception of type {0} occured. Arguments:{1!r}"
+                message = template.format(type(ex).__name__, ex.args)
+                logging.error(f'Error sending data. Error: {message}')
+            
         time.sleep(config["send"]["sleepSec"])
 
 if __name__ == "__main__" :
