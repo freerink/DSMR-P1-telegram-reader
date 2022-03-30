@@ -28,3 +28,9 @@ Notes
 =====
 
 The specification and a list of OBIS codes from the specification can be found in the documentation folder.
+
+Start process in the backgroud
+=====
+Start the process in the backgroud with the following command:
+
+```nohup ./telegram_from_serial.py > reader.log &```
