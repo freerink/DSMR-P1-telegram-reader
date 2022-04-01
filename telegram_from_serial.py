@@ -234,7 +234,10 @@ if __name__ == "__main__" :
                 # date-time of the telegram
                 if code == '0-0:1.0.0' :
                     timestamp = value.lstrip('\(').rstrip('\)')
-                    ts = datetime.strptime(timestamp, '%y%m%d%H%M%SW')
+                    mask = '%y%m%d%H%M%SS'
+                    if ( timestamp.endswith('W') ) :
+                        mask = '%y%m%d%H%M%SW'
+                    ts = datetime.strptime(timestamp, mask)
                     json_values['dateTime'] = '' + ts.strftime("%Y-%m-%dT%H:%M:%S")
                 elif code in list_of_interesting_codes and len(list_of_interesting_codes[code][1]) > 0 :
                     # Cleanup value
